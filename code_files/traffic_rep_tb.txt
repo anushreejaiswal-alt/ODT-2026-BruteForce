@@ -1,0 +1,69 @@
+`timescale 1ns / 1ps
+
+module traffic_density_tb;
+
+    // Inputs
+    reg clk;
+    reg rst;
+    reg d1;
+    reg d2;
+
+    // Outputs
+    wire [2:0] light_M1;
+    wire [2:0] light_M2;
+
+    // Instantiate DUT
+    traffic_density uut (
+        .clk(clk),
+        .rst(rst),
+        .d1(d1),
+        .d2(d2),
+        .light_M1(light_M1),
+        .light_M2(light_M2)
+    );
+
+    // Clock generation (10ns period)
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+
+    // Stimulus
+    initial begin
+        // Initial values
+        rst = 1;
+        d1  = 0;
+        d2  = 0;
+
+        #20;
+        rst = 0;
+
+        // Case 1: both low density
+        #50;
+
+        // Case 2: road1 high density
+        d1 = 1; d2 = 0;
+        #100;
+
+        // Case 3: road2 high density
+        d1 = 0; d2 = 1;
+        #100;
+
+        // Case 4: both high
+        d1 = 1; d2 = 1;
+        #100;
+
+        // Case 5: back to low
+        d1 = 0; d2 = 0;
+        #100;
+
+        $stop;
+    end
+
+    // Monitor outputs
+    initial begin
+        $monitor("Time=%0t | d1=%b d2=%b | M1=%b M2=%b",
+                  $time, d1, d2, light_M1, light_M2);
+    end
+
+endmodule
