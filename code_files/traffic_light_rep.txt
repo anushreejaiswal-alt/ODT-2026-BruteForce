@@ -1,0 +1,101 @@
+`timescale 1ns / 1ps
+
+module traffic_density(
+    input clk,         // 100 MHz board clock
+    input rst,         // Reset switch
+    input d1,          // Density sensor Road 1
+    input d2,          // Density sensor Road 2
+    output reg [2:0] light_M1, // Road 1 Lights (Green, Yellow, Red)
+    output reg [2:0] light_M2  // Road 2 Lights (Green, Yellow, Red)
+);
+
+    // ==========================================
+    // 1. CLOCK DIVIDER (100 MHz down to 1 Hz)
+    // ==========================================
+    reg [25:0] count_1Hz;
+    reg slow_clk;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            count_1Hz <= 0;
+            slow_clk <= 0;
+        end else if (count_1Hz == 49_999_999) begin
+            count_1Hz <= 0;
+            slow_clk <= ~slow_clk; // Toggles every 0.5s -> Full cycle is 1 second
+        end else begin
+            count_1Hz <= count_1Hz + 1;
+        end
+    end
+
+    // ==========================================
+    // 2. STATE MACHINE SETUP
+    // ==========================================
+    // Define the 4 standard states of a 2-way intersection
+    parameter S0_M1_GRN = 2'b00; // M1 is Green,  M2 is Red
+    parameter S1_M1_YEL = 2'b01; // M1 is Yellow, M2 is Red
+    parameter S2_M2_GRN = 2'b10; // M1 is Red,    M2 is Green
+    parameter S3_M2_YEL = 2'b11; // M1 is Red,    M2 is Yellow
+
+    reg [1:0] state;
+    reg [3:0] timer; // Counts seconds to know when to switch lights
+
+    // ==========================================
+    // 3. TIMING & DENSITY LOGIC (Runs on slow_clk)
+    // ==========================================
+    always @(posedge slow_clk or posedge rst) begin
+        if (rst) begin
+            state <= S0_M1_GRN;
+            timer <= 0;
+        end else begin
+            case(state)
+                S0_M1_GRN: begin
+                    // If Road 1 has traffic (d1=1, d2=0), stay green for 8 seconds. 
+                    // Otherwise, normal green is 4 seconds.
+                    if ((d1 == 1 && d2 == 0 && timer < 8) || (timer < 4)) begin
+                        timer <= timer + 1;
+                    end else begin
+                        state <= S1_M1_YEL; // Move to Yellow
+                        timer <= 0;
+                    end
+                end
+                
+                S1_M1_YEL: begin
+                    // Yellow light is always 2 seconds
+                    if (timer < 1) timer <= timer + 1;
+                    else begin state <= S2_M2_GRN; timer <= 0; end
+                end
+                
+                S2_M2_GRN: begin
+                    // If Road 2 has traffic (d1=0, d2=1), stay green for 8 seconds.
+                    // Otherwise, normal green is 4 seconds.
+                    if ((d1 == 0 && d2 == 1 && timer < 8) || (timer < 4)) begin
+                        timer <= timer + 1;
+                    end else begin
+                        state <= S3_M2_YEL; // Move to Yellow
+                        timer <= 0;
+                    end
+                end
+                
+                S3_M2_YEL: begin
+                    // Yellow light is always 2 seconds
+                    if (timer < 1) timer <= timer + 1;
+                    else begin state <= S0_M1_GRN; timer <= 0; end
+                end
+            endcase
+        end
+    end
+
+    // ==========================================
+    // 4. LED OUTPUT LOGIC (3'b100=Green, 3'b010=Yellow, 3'b001=Red)
+    // ==========================================
+    always @(*) begin
+        case(state)
+            S0_M1_GRN: begin light_M1 = 3'b100; light_M2 = 3'b001; end
+            S1_M1_YEL: begin light_M1 = 3'b010; light_M2 = 3'b001; end
+            S2_M2_GRN: begin light_M1 = 3'b001; light_M2 = 3'b100; end
+            S3_M2_YEL: begin light_M1 = 3'b001; light_M2 = 3'b010; end
+            default:   begin light_M1 = 3'b001; light_M2 = 3'b001; end // Safety state (Both Red)
+        endcase
+    end
+
+endmodule
