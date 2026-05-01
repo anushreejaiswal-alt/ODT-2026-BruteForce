@@ -352,20 +352,33 @@ Suggested sequence:
 
 ## 9.1 Full BOM
 
-| Item                             | Quantity | In Kit? | Need to Buy? | Estimated Cost | Material / Spec               | Why This Choice?          |
-| -------------------------------- | --------:| ------- | ------------ | --------------:| ----------------------------- | ------------------------- |
-| `[RASPI]`                        | `1`      | `Yes`   | `No`         | `0`            | `38 Pin ESP32`                | `[To control components]` |
-| `[Motor Driver]`                 | `[1]`    | `[Yes]` | `[No]`       | `0`            | `[LN296]`                     | `[To drive both motors]`  |
-| `[DC Motors and wheel]`          | `[2]`    | `[No]`  | `[Yes]`      | `[150]`        | `[BO Motors and 6 cm wheels]` | `[high torque motors]`    |
-| `[Buck Converter]`               | `[1]`    | `[No]`  | `[Yes]`      | `[75]`         |                               |                           |
-| `[Li-ion batteries with holder]` | `[1]`    | `[No]`  | `[Yes]`      | `[200]`        |                               |                           |
+## Project Component List
 
-## 9.2 Material Justification
+| Item | Qty | In Kit? | Need to Buy? | Est. Cost | Material / Spec | Why This Choice? |
+| :--- | :---: | :---: | :---: | :---: | :--- | :--- |
+| **Spartan-7 FPGA Board** | 1 | Yes | No | $0 | Xilinx Spartan-7 (XC7S50), 100MHz clock | Required to compute priority score ($w_1D + w_2T + w_3P - w_4S$) in parallel for 4 lanes. |
+| **USB Programming Cable** | 1 | Yes | No | $0 | USB Type-A to Micro-USB | To flash the bitstream via Vivado and power the board. |
+| **On-board Slide Switches** | 2 | Yes | No | $0 | Built-in to Boolean Board | Used to simulate varying levels of Density (D) and trigger Emergency Override. |
+| **On-board Push Button** | 1 | Yes | No | $0 | Built-in to Boolean Board | Used to trigger the Pedestrian Demand (P) variable. |
+| **On-board RGB LEDs** | 5 | Yes | No | $0 | Built-in to Boolean Board | To visually represent the winning lane and the pedestrian signal. |## 9.2 Material Justification
 
 Explain why you selected your main materials and components.
 
 **Response:**  
-`DC motors (BO motors) were chosen instead of servos or steppers because the system requires continuous rotation for movement rather than precise angular control (Previously, we were considering using steppers as we were planning on tracking movement on the ESP using its relative position from an origin, but since we're using a camera now, this is not required). A motor driver (L298N) was used to allow bidirectional control and speed variation using PWM.`
+## Hardware Design Rationale
+
+> **Core Logic:** The **Real Digital Boolean Board (Spartan-7 FPGA)** was selected as the central processing unit because the new adaptive scheduling algorithm requires calculating multiple arithmetic equations ($w_1D + w_2T + w_3P - w_4S$) and comparing their results at the exact same time. 
+
+### Why FPGA?
+An FPGA's **parallel processing capabilities** handle this mathematical arbitration instantly and deterministically, providing a level of timing precision that sequential microcontrollers cannot match.
+
+### Simulation & Interface
+To keep the project strictly focused on digital logic design and to ensure a fail-safe testing environment, external environmental detectors were omitted. Instead, the algorithm's required variables are simulated via:
+
+*   **Density ($D$), Pedestrian Demand ($P$), and Emergency Overrides:** Fed directly into the FPGA using the board's built-in **debounced push buttons** and **slide switches**.
+*   **Visual Feedback:** The onboard **RGB LEDs** are utilized to display dynamic light transitions.
+
+This integrated approach eliminates the need for external breadboarding and complex power routing, keeping the hardware footprint clean and reliable.
 
 
 ## 9.3 Items You chose
@@ -378,59 +391,91 @@ Explain why you selected your main materials and components.
 
 ## 9.4 Budget Summary
 
-| Budget Item           | Estimated Cost              |
-| --------------------- | ---------------------------:|
-| Electronics           | `[400]`                     |
-| Mechanical parts      | `[200]`                     |
-| Fabrication materials | `[0 (Available on campus)]` |
-| Purchased extras      | `[0]`                       |
-| Contingency           | `[300]`                     |
-| **Total**             | `[900]`                     |
+## Procurement & Availability
+
+| Item | Why Needed | Purchase Link | Latest Safe Date | Status |
+| :--- | :--- | :--- | :---: | :---: |
+| **Spartan-7 Boolean Board** | Parallel computation of priority scores and physical I/O | Provided by Campus Lab | N/A | ✅ Available |
+| **Micro-USB Cable** | Flashing bitstream from PC | Existing | N/A | ✅ Available |
+| **PC with Vivado Suite** | Verilog synthesis and simulation | Existing | N/A | ✅ Available |
 
 ## 9.5 Budget Reflection
+## Project Budget Overview
+
+| Budget Item | Estimated Cost (₹) |
+| :--- | :---: |
+| Electronics | 0 |
+| Mechanical parts | 0 |
+| Fabrication materials | 0 |
+| Purchased extras | 0 |
+| Contingency | 0 |
+| **Total** | **₹0** |
+
+> **Note:** Since all primary components (FPGA board, cables, and software) are provided by the Campus Lab or are already owned, the current projected out-of-pocket expenditure for this project is zero.
+
 
 If your cost is too high, what can be simplified, removed, substituted, or shared?
 
-**Response:**  
+## Budget Summary & Hardware Efficiency
 
----
+The project budget is successfully maintained at **zero**. By strategically mapping the advanced algorithm parameters—**Density**, **Wait Time**, and **Pedestrian Demand**—to the existing switches and internal timers of the Boolean Board, we eliminated the need to purchase any external detection modules or microcontrollers. 
+
+### Key Efficiency Outcomes:
+*   **Cost Minimization:** Total expenditure is ₹0 by leveraging campus resources.
+*   **Resource Optimization:** Maximizes the utility of the Spartan-7's onboard resources (switches, buttons, and timers).
+*   **Hardware Realization:** Achieves complex, adaptive traffic routing through mathematical arbitration rather than expensive external sensors.
+
+This approach demonstrates that high-level adaptive systems can be effectively modeled and validated using foundational digital logic components.
 
 # 10. Planning the Work
 
 ## 10.1 Team Working Agreement
 
-Write how your team will work together.
+## Team Organization & Workflow
 
-Include:
+*   **Task Division:** Tasks are divided based on technical strengths with intentional overlap for support.
+    *   **Devyani:** Leads the system architecture, algorithm optimization, `.xdc` hardware constraints, and handles physical hardware connections. Actively co-codes and assists with integrating the logic blocks.
+    *   **Anushree & Disha:** Lead the main Verilog implementation and Vivado synthesis.
+    *   **Nidhi:** Drives the ideation phase, manages version control, and owns all project documentation.
 
-- how tasks are divided,
-- how decisions are made,
-- how progress will be checked,
-- what happens if a task is delayed,
-- how documentation will be maintained.
+*   **Decision Making:** 
+    Architectural and algorithmic decisions are proposed by Devyani and finalized during ideation syncs guided by Nidhi. Code-level implementation decisions are managed jointly by Anushree, Disha, and Devyani.
 
-**Response:**  
+*   **Progress Checks:** 
+    The team uses the shared Git repository (managed by Nidhi) as the single source of truth. Progress is tracked via successful module commits and Vivado simulation passes.
 
+*   **Handling Delays:** 
+    *   *Technical Roadblocks:* If Vivado synthesis or timing constraints fail, Devyani, Anushree, and Disha will swarm the issue to debug the Verilog logic and connections. 
+    *   *Administrative Roadblocks:* If documentation or presentation deliverables lag, team members will support Nidhi after their primary technical modules are complete.
 
+*   **Documentation:** 
+    Nidhi maintains the live project documentation and presentation (PPT), pulling technical details from the Git repository and Vivado reports generated by the coding team.
+
+    
 ## 10.2 Task Breakdown
 
-| Task ID | Task                    | Owner    | Estimated Hours | Deadline     | Dependency | Status |
-| ------- | ----------------------- | -------- | ---------------:| ------------ | ---------- | ------ |
-| T1      | `[Finalize concept]`    | `[Both]` | `2`             | `1st April`  | `None`     | `Done` |
+| Task ID | Task | Owner | Est. Hours | Deadline | Dependency | Status |
+| :---: | :--- | :--- | :---: | :---: | :---: | :--- |
+| **T1** | Ideation & Algorithm Finalization | Everyone | 2 | April 30 | None | Done |
+| **T2** | Define System Architecture & Math Logic | Devyani | 3 | April 30 | T1 | Done |
+| **T3** | Git Repository Setup | Nidhi | 1 | April 30 | None | Ongoing |
+| **T4** | Main Verilog Coding (FSM & Submodules) | Anushree & Disha (assist: Devyani) | 6 | May 2 | T2 |  Ongoing |
+| **T5** | Map .xdc Constraints & Hardware Connections | Devyani | 2 | May 2 | T2 | Ongoing |
+| **T6** | Vivado Synthesis, Implementation & Testing | Anushree, Disha, & Devyani | 4 | May 2 | T4, T5 | Half-way |
+| **T7** | Final Project Documentation & PPT | Nidhi | 4 | May 2 | T6 | Pending |
 
 
 ## 10.3 Responsibility Split
 
-| Area                 | Main Owner     | Support Owner |
-| -------------------- | ----------     | ------------- |
-| Concept              | `[Mrugendra]`  | `[Jyoti]`     |
-| Electronics          | `[]`           | `[]`          |
-| Coding               | `[]`           | `[]`          |
-| Mechanical build     | `[]`           | `[]`          |
-| Testing              | `[]`           | `[]`          |
-| Documentation        | `[]`           | `[]`          |
-
----
+| Area | Main Owner | Support Owner |
+| :--- | :--- | :--- |
+| **Concept & Ideation** | All members | All Members |
+| **Architecture & Algorithm sketching** | Devyani | Nidhi |
+| **Coding (Verilog in Vivado)** | Anushree & Disha | Devyani |
+| **Electronics (Hardware connections / .xdc)** | Devyani | Anushree |
+| **Version Control (Git Repo)** | Nidhi | Disha |
+| **Testing (Simulation & On-Board)** | Anushree & Disha | Devyani |
+| **Documentation & PPT** | Nidhi | All Members |
 
 # 11 hour Milestones
 
@@ -464,7 +509,7 @@ Expected outcomes:
 
 - [x] Physical body built
 - [x] Electronics integrated
-- [x] Code connected to hardware
+- [ ] Code connected to hardware
 - [ ] App connected if required
 - [x] First playable version exists
 
@@ -472,20 +517,18 @@ Expected outcomes:
 
 Expected outcomes:
 
-- [x] Technical bugs reduced
-- [x] Playtesting completed
-- [x] Improvements made
-- [x] Documentation completed
-- [x] Final build ready
+- [ ] Technical bugs reduced
+- [ ] Playtesting completed
+- [ ] Improvements made
+- [ ] Documentation completed
+- [ ] Final build ready
 
 ## 12.2  Update Log
 
-| Days   | Planned Goal   | What Actually Happened | What Changed   | Next Steps     |
-| ------ | -------------- | ---------------------- | -------------- | -------------- |
-| Day 1 | `[Write here]` | `[Write here]`         | `[Write here]` | `[Write here]` |
-| Day 2 | `[Write here]` | `[Write here]`         | `[Write here]` | `[Write here]` |
-| Day 3 | `[Write here]` | `[Write here]`         | `[Write here]` | `[Write here]` |
-| Day 4 | `[Write here]` | `[Write here]`         | `[Write here]` | `[Write here]` |
+| Days | Planned Goal | What Actually Happened | What Changed | Next Steps |
+| :---: | :--- | :--- | :--- | :--- |
+| **Day 1** | Setup environment, map hardware, and build a baseline traffic controller prototype. | Shreenidhi initialized the Git repo. Devyani mapped the basic `.xdc` file. Anushree and Disha successfully coded, synthesized, and flashed a normal round-robin FSM that included basic switch-based density logic. Displayed outputs on same-color LEDs. | Decided to build a simpler MVP first to guarantee a working project before tackling the complex mathematical arbiter. | **Tomorrow (Day 2):** Upgrade the FSM to the Weighted Priority Algorithm, add debounced pedestrian/emergency interrupts, and remap to RGB LEDs. |
+| **Day 2** | Upgrade to Weighted Priority algorithm, add interrupts, and test. | *(To be filled tomorrow)* | *(To be filled tomorrow)* | *(To be filled tomorrow - Final Project Submission)* |
 
 ---
 
