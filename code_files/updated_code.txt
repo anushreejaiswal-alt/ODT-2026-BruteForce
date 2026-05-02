@@ -1,0 +1,183 @@
+`timescale 1ns / 1ps
+
+module smart_traffic_controller(
+    input clk,
+    input reset,
+
+    // 🚨 NEW: Emergency & Pedestrian Overrides
+    input emg_override, // Slide switch for Ambulance
+    input ped_button,   // Push button for Pedestrian Crossing
+
+    // Reduced inputs (fit FPGA switches)
+    input [3:0] D_A,
+    input [3:0] D_B,
+    input [3:0] T_A,
+    input [3:0] T_B,
+    input P_A, S_A,
+    input P_B, S_B,
+
+    // Outputs
+    output reg R_A, Y_A, G_A,
+    output reg R_B, Y_B, G_B,
+    output reg PED_WALK 
+);
+
+    // -------------------------------
+    // 🧠 Priority Calculation
+    // -------------------------------
+    parameter w1 = 2, w2 = 1, w3 = 1, w4 = 1;
+
+    wire [7:0] priority_A, priority_B;
+
+    assign priority_A = (w1*D_A + w2*T_A + w3*P_A > w4*S_A) ? 
+                        (w1*D_A + w2*T_A + w3*P_A - w4*S_A) : 0;
+
+    assign priority_B = (w1*D_B + w2*T_B + w3*P_B > w4*S_B) ? 
+                        (w1*D_B + w2*T_B + w3*P_B - w4*S_B) : 0;
+
+    // -------------------------------
+    //  Timing Parameters (scaled)
+    // -------------------------------
+    parameter MIN_GREEN = 3;
+    parameter MAX_GREEN = 10;
+    parameter YELLOW_TIME = 2;
+    parameter THRESHOLD = 2;
+    parameter PED_TIME = 5; // 
+
+    // -------------------------------
+    // FSM STATES (Upgraded to 3-bit for 6 states)
+    // -------------------------------
+    parameter A_GREEN   = 3'b000;
+    parameter A_YELLOW  = 3'b001;
+    parameter B_GREEN   = 3'b010;
+    parameter B_YELLOW  = 3'b011;
+    parameter STATE_EMG = 3'b100; // Emergency Override
+    parameter STATE_PED = 3'b101; // Pedestrian Crossing
+
+    reg [2:0] state;
+    reg [31:0] timer;
+    reg ped_request_pending; // Memory flag for button presses
+
+    // -------------------------------
+    // Clock Divider (~1 Hz)
+    // -------------------------------
+    reg [25:0] slow_clk_counter;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            slow_clk_counter <= 0;
+        else
+            slow_clk_counter <= slow_clk_counter + 1;
+    end
+
+    // NOTE: Change [25] to [2] for Vivado Simulations, keep [25] for the physical board!
+    wire clk_slow = slow_clk_counter[25];  
+
+    // -------------------------------
+    // FSM LOGIC
+    // -------------------------------
+    always @(posedge clk_slow or posedge reset) begin
+        if (reset) begin
+            state <= A_GREEN;
+            timer <= 0;
+            ped_request_pending <= 0;
+        end else begin
+            // Remember if pedestrian pushed the button
+            if (ped_button) ped_request_pending <= 1;
+
+            // EMERGENCY OVERRIDE (Highest Priority - Instant Jump)
+            if (emg_override) begin
+                state <= STATE_EMG;
+                timer <= 0;
+            end else begin
+                timer <= timer + 1;
+
+                case(state)
+                    A_GREEN: begin
+                        if (timer >= MIN_GREEN) begin
+                            // Added ped_request_pending to early cutoff condition
+                            if (D_A < THRESHOLD || T_B > T_A || timer >= MAX_GREEN || ped_request_pending) begin
+                                timer <= 0;
+                                state <= A_YELLOW;
+                            end
+                        end
+                    end
+
+                    A_YELLOW: begin
+                        if (timer >= YELLOW_TIME) begin
+                            timer <= 0;
+                            // Route to Pedestrian Crossing if requested
+                            if (ped_request_pending)
+                                state <= STATE_PED;
+                            else if (priority_B > priority_A + 1)
+                                state <= B_GREEN;
+                            else
+                                state <= A_GREEN;
+                        end
+                    end
+
+                    B_GREEN: begin
+                        if (timer >= MIN_GREEN) begin
+                            if (D_B < THRESHOLD || T_A > T_B || timer >= MAX_GREEN || ped_request_pending) begin
+                                timer <= 0;
+                                state <= B_YELLOW;
+                            end
+                        end
+                    end
+
+                    B_YELLOW: begin
+                        if (timer >= YELLOW_TIME) begin
+                            timer <= 0;
+                            if (ped_request_pending)
+                                state <= STATE_PED;
+                            else if (priority_A > priority_B + 1)
+                                state <= A_GREEN;
+                            else
+                                state <= B_GREEN;
+                        end
+                    end
+
+                    STATE_EMG: begin
+                        // If ambulance leaves, recover gracefully to Lane A
+                        if (!emg_override) begin
+                            state <= A_GREEN;
+                            timer <= 0;
+                        end
+                    end
+
+                    STATE_PED: begin
+                        // Wait for pedestrians to cross, then clear the flag
+                        if (timer >= PED_TIME) begin
+                            state <= A_GREEN; // Default back to A
+                            timer <= 0;
+                            ped_request_pending <= 0; // Clear memory flag
+                        end
+                    end
+                endcase
+            end
+        end
+    end
+
+    // -------------------------------
+    // OUTPUT LOGIC
+    // -------------------------------
+    always @(*) begin
+        R_A = 0; Y_A = 0; G_A = 0;
+        R_B = 0; Y_B = 0; G_B = 0;
+        PED_WALK = 0;
+
+        case(state)
+            A_GREEN: begin G_A = 1; R_B = 1; end
+            A_YELLOW: begin Y_A = 1; R_B = 1; end
+            B_GREEN: begin G_B = 1; R_A = 1; end
+            B_YELLOW: begin Y_B = 1; R_A = 1; end
+            
+            // Ambulance Priority: Main lane gets Green instantly, side street gets Red
+            STATE_EMG: begin G_A = 1; R_B = 1; end
+            
+            // Pedestrian Priority: ALL CARS STOP. Walk light turns on.
+            STATE_PED: begin R_A = 1; R_B = 1; PED_WALK = 1; end
+        endcase
+    end
+
+endmodule
