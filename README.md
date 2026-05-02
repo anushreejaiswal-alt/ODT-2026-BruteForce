@@ -155,44 +155,101 @@ Check all that apply.
 
 - [ ] Mechanical
 
-- [x] Sensor-based
+- [ ] Sensor-based
 
-- [x] App-connected
+- [ ] App-connected
 
-- [x] Motorized
+- [ ] Motorized
 
 - [ ] Sound-based
 
 - [x] Light-based
 
-- [x] Screen/UI-based
+- [ ] Screen/UI-based
 
-- [x] Fabricated structure
+- [ ] Fabricated structure
 
-- [x] Game logic based
+- [ ] Game logic based
 
-- [x] Installation
+- [ ] Installation
 
 - [ ] Other:
 
 ## 5.2 High-Level System Description
+## Features and Inputs
 
-Explain how the system works in simple terms.
+The system processes real-time environmental data via physical switches on the FPGA board to determine signal timing:
 
-Include:
+* **Traffic Density (D_A, D_B):** Represents the number of vehicles on each road.
+* **Waiting Time (T_A, T_B):** Monitors how long vehicles have been stationary.
+* **Priority Signals (P_A, P_B):** Emergency overrides for ambulances, fire trucks, or high-priority lanes.
+* **Special Conditions (S_A, S_B):** Conditions such as pedestrian crossings or road restrictions.
+* **Clock and Reset:** Global signals for synchronization and system initialization.
 
-- input,
-- processing,
-- output,
-- physical structure,
-- app interaction if any.
+---
 
+## Processing Logic
+
+The controller logic is divided into two primary stages:
+
+### 1. Priority Calculation
+A dynamic score is calculated for each road to determine switching priority:
+* **Score Increases:** Higher traffic density, extended waiting time, or active priority signals.
+* **Score Decreases:** Higher saturation levels to maintain throughput and prevent bottlenecks.
+
+### 2. FSM Decision Logic
+A Finite State Machine (FSM) controls the signal transitions using the following constraints:
+* **Minimum Green Time:** Ensures no rapid, flickering signal changes.
+* **Early Switching:** Allows the signal to change early if traffic reduces significantly.
+* **Maximum Time Limit:** Enforces fairness by preventing one road from holding the green light indefinitely.
+* **Priority Comparison:** Dynamically selects the next road based on the highest calculated score.
+
+---
+
+## System Outputs
+
+The controller drives standard traffic light signals for Road A and Road B. Safety logic ensures only one road is granted a green signal at any time.
+
+* **Road A:** Red (R_A), Yellow (Y_A), Green (G_A).
+* **Road B:** Red (R_B), Yellow (Y_B), Green (G_B).
+
+---
+
+## Physical Structure and Implementation
+
+The design is optimized for the Spartan-7 FPGA using Verilog HDL:
+
+* **Inputs:** Mapped to physical onboard switches representing traffic conditions.
+* **Outputs:** Mapped to onboard LEDs (including RGB support) representing traffic signals.
+* **Clock Divider:** Converts the high-frequency FPGA clock into a slower signal for real-time operation.
+* **Controller Logic:** Implemented using Verilog and synthesized on hardware.
+
+---
+
+## Design Documentation
+
+The following architectural diagrams serve as the blueprint for this implementation:
+
+1. **State-diagram.jpeg:** Illustrates the behavioral flow and transition triggers between states S0-S3.
+2. **FSM transition table.jpeg:** Maps the Current State (CS) and inputs to the Next State (NS).
+3. **FSM output table.jpeg:** Defines the Moore Machine output logic for signal color encodings.
+
+---
+
+> **Note:** This design operates as a standalone hardware controller; there is currently no external app or software interaction required.
 **Response:**  
 
 ## 5.3 Input / Output Map
 
-| System Part                              | Type            | What It Does                                                               |
-
+| System Part | Type | What It Does |
+| :--- | :--- | :--- |
+| Input Signals | Input | Provides traffic data such as density, waiting time, priority, and special conditions for both roads. |
+| Priority Calculator | Processing | Computes priority values using a weighted formula to decide which road should get preference. |
+| Finite State Machine (FSM) | Control Logic | Controls traffic light states (Green, Yellow, Red) and manages switching between roads. |
+| Timer | Processing | Ensures minimum, maximum, and yellow signal durations are maintained. |
+| Clock Divider | Processing | Slows down the FPGA clock to a human-observable speed for traffic signal timing. |
+| Output Logic | Output | Generates control signals for traffic lights based on current FSM state. |
+| Traffic Lights (LEDs) | Output Hardware | Displays Red, Yellow, Green signals for both roads. |
 
 ---
 
@@ -244,17 +301,45 @@ Add a sketch with labels showing:
 
 | Component                 | Quantity | Purpose                               |
 | ------------------------- | --------:| ------------------------------------- |
-| `[Raspi/FPGA]`                 | `1`      | `[Main controller]`                   |
-| `[L298N Motor Driver]`    | `1`      | `[Control Motors]`                    |
-| `[BO Motors]`             | `2`      | `[Rotate wheels]`                     |
-| `[Buck Converter]`        | `1`      | `[Power ESP32]`                       |
-| `[Li Ion Battery Pack]`   | `2`      | `[Power]`                             |
-| `[Projector]`             | `1`      | `[Display obstacles]`                 |
-| `Camera (Webcam / Phone)` | `1`      | `[Tracks car position using markers]` |
+| `[FPGA Board (Spartan 7]` | `1`      | `[Main controller that implements the traffic logic and FSM]`                   |
+---
 
 ## 7.2 Wiring Plan
 
-Describe the main electrical connections.
+The implementation utilizes separate dedicated LEDs for every signal to ensure clear visual feedback.
+
+### Input Mapping
+| Signal | Port Type | Hardware Component |
+| :--- | :--- | :--- |
+| clk | Input | Onboard 100 MHz Oscillator |
+| reset | Input | Master Reset Push Button |
+| emg_override | Input | Emergency Slide Switch |
+| ped_button | Input | Pedestrian Request Push Button |
+| D_A [3:0] | Input | 4 Slide Switches (Road A Density) |
+| D_B [3:0] | Input | 4 Slide Switches (Road B Density) |
+| T_A [3:0] | Input | 4 Slide Switches (Road A Wait Time) |
+| T_B [3:0] | Input | 4 Slide Switches (Road B Wait Time) |
+
+### Output Mapping (Dedicated LEDs)
+| Signal | Color | Function |
+| :--- | :--- | :--- |
+| G_A | Green | Road A Go |
+| Y_A | Yellow | Road A Transition |
+| R_A | Red | Road A Stop |
+| G_B | Green | Road B Go |
+| Y_B | Yellow | Road B Transition |
+| R_B | Red | Road B Stop |
+| PED_WALK | Blue/White | Dedicated Pedestrian Walking Signal |
+
+---
+
+## Processing Logic
+
+### 1. Priority Calculation
+The controller calculates a score for each road using a weighted formula:
+$$priority\_A = (w1 \cdot D\_A + w2 \cdot T\_A + w3 \cdot P\_A - w4 \cdot S\_A)$$
+* **Weight Parameters:** w1=2, w2=1, w3=1, w4=1.
+* **Logic:** Higher density and wait times increase the priority, while special restrictions reduce it.
 
 **sample Response:**  
 `The RASPI is connected to the motor driver (L298N) using four GPIO pins (18,19; 22,23) to control motor direction (IN1, IN2, IN3, IN4). Two PWM-capable pins (ENA and ENB; 25 and 26) are connected to control the speed of each motor.
